@@ -2,6 +2,8 @@
 
 > A simple tool to download and play League of Legends replays by entering the Game ID.
 
+![League Replay Downloader Screenshot](https://i.imgur.com/d4fV29G.png)
+
 ## 🚀 Overview
 
 The **League Replay Downloader** allows you to easily download and play League of Legends replays by entering the Game ID. Simply ensure that the replay version matches the current patch on your League Client, and you’re ready to go!
@@ -30,5 +32,6 @@ The **League Replay Downloader** allows you to easily download and play League o
   - [Psutil](https://pypi.org/project/psutil/) - To locate and connect to the League Client.
 
 To install dependencies, you can run:
+
 ```bash
 pip install -r requirements.txt
