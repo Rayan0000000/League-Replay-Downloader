@@ -8,7 +8,7 @@ from datetime import datetime
 import time
 
 def connect_to_lcu():
-    """Connect to the League Client and retrieve port and auth token."""
+    """Connect to the League Client and get port and auth token."""
     for proc in psutil.process_iter(['name', 'cmdline']):
         proc_name = proc.info['name']
         if proc_name in ['LeagueClientUx.exe', 'LeagueClientUx']:
@@ -25,16 +25,16 @@ def connect_to_lcu():
     return None
 
 def list_available_replays(recently_downloaded):
-    """List replay files sorted by date."""
+    """Get a list of replay files sorted by date."""
     replay_dir = get_replay_directory()
 
     if not os.path.exists(replay_dir):
-        return None, f"Replay directory does not exist: {replay_dir}"
+        return None, f"Replay directory not found: {replay_dir}"
 
     rofl_files = [f for f in os.listdir(replay_dir) if f.endswith('.rofl')]
 
     if not rofl_files:
-        return None, "No replays available."
+        return None, "No replays found."
 
     replay_ids = []
     for file in rofl_files:
@@ -55,11 +55,11 @@ def list_available_replays(recently_downloaded):
     return replay_ids, None
 
 def download_replay_api(game_id):
-    """Start downloading a replay via the API."""
+    """Download a replay using the API."""
     lcu_data = connect_to_lcu()
 
     if not lcu_data:
-        return {'success': False, 'message': "LeagueClient not found. Make sure the client is running and try again.", 'game_id': game_id}
+        return {'success': False, 'message': "LeagueClient not found. Ensure it's running and try again.", 'game_id': game_id}
 
     url = f"https://127.0.0.1:{lcu_data['port']}/lol-replays/v1/rofls/{game_id}/download"
     auth = requests.auth.HTTPBasicAuth('riot', lcu_data['auth_token'])
@@ -71,22 +71,21 @@ def download_replay_api(game_id):
     try:
         response = requests.post(url, auth=auth, json={}, headers=headers, verify=False)
     except requests.exceptions.ConnectionError:
-        return {'success': False, 'message': "Failed to connect. Make sure the LeagueClient is running.", 'game_id': game_id}
+        return {'success': False, 'message': "Connection failed. Make sure LeagueClient is running.", 'game_id': game_id}
 
     if response.status_code in [201, 204]:
-        return {'success': True, 'message': "Replay download started successfully!", 'game_id': game_id}
+        return {'success': True, 'message': "Download started!", 'game_id': game_id}
     elif response.status_code == 404:
-        return {'success': False, 'message': f"Game with ID {game_id} not found or replay is unavailable.", 'game_id': game_id}
+        return {'success': False, 'message': f"Game ID {game_id} not found or replay unavailable.", 'game_id': game_id}
     else:
-        response_text = response.text
-        return {'success': False, 'message': f"Error: {response.status_code} - {response_text}", 'game_id': game_id}
+        return {'success': False, 'message': f"Error {response.status_code}: {response.text}", 'game_id': game_id}
 
 def play_replay_api(game_id):
-    """Start replay playback via the API."""
+    """Play a replay using the API."""
     lcu_data = connect_to_lcu()
 
     if not lcu_data:
-        return "LeagueClient not found. Make sure the client is running and try again."
+        return "LeagueClient not found. Ensure it's running and try again."
 
     url = f"https://127.0.0.1:{lcu_data['port']}/lol-replays/v1/rofls/{game_id}/watch"
     auth = requests.auth.HTTPBasicAuth('riot', lcu_data['auth_token'])
@@ -98,31 +97,29 @@ def play_replay_api(game_id):
     try:
         response = requests.post(url, auth=auth, json={}, headers=headers, verify=False)
     except requests.exceptions.ConnectionError:
-        return "Failed to connect. Make sure the LeagueClient is running."
+        return "Connection failed. Make sure LeagueClient is running."
 
     if response.status_code in [200, 204]:
-        return "Replay playback started successfully!"
+        return "Replay playback started!"
     elif response.status_code == 404:
-        return f"Game with ID {game_id} not found or replay is unavailable."
+        return f"Game ID {game_id} not found or replay unavailable."
     else:
-        response_text = response.text
-        return f"Error: {response.status_code} - {response_text}"
+        return f"Error {response.status_code}: {response.text}"
 
 def get_replay_directory():
-    """Get the default replay directory."""
+    """Return the default replay directory path."""
     home_dir = os.path.expanduser("~")
-    replay_dir = os.path.join(home_dir, "Documents", "League of Legends", "Replays")
-    return replay_dir
+    return os.path.join(home_dir, "Documents", "League of Legends", "Replays")
 
 def launch_replay():
     """Open the latest replay file with the default application."""
     replay_dir = get_replay_directory()
     if not os.path.exists(replay_dir):
-        return f"Replay directory does not exist: {replay_dir}"
+        return f"Replay directory not found: {replay_dir}"
 
     rofl_files = [f for f in os.listdir(replay_dir) if f.endswith('.rofl')]
     if not rofl_files:
-        return "No replay files found in the replay directory."
+        return "No replay files found."
 
     rofl_files.sort(key=lambda x: os.path.getmtime(os.path.join(replay_dir, x)), reverse=True)
     latest_replay = rofl_files[0]
@@ -139,8 +136,53 @@ def launch_replay():
     except Exception as e:
         return f"Failed to launch replay: {e}"
 
+def get_game_details(game_id):
+    """Get game details for metadata creation."""
+    lcu_data = connect_to_lcu()
+    if not lcu_data:
+        print("LeagueClient not found. Cannot get game details.")
+        return None
+
+    url = f"https://127.0.0.1:{lcu_data['port']}/lol-match-history/v1/games/{game_id}"
+    auth = requests.auth.HTTPBasicAuth('riot', lcu_data['auth_token'])
+
+    requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+    try:
+        response = requests.get(url, auth=auth, verify=False)
+        if response.status_code == 200:
+            game_info = response.json()
+            game_version = game_info.get('gameVersion')
+            game_type = game_info.get('gameType')
+            queue_id = game_info.get('queueId')
+            game_creation = game_info.get('gameCreation')
+            game_duration = game_info.get('gameDuration')
+
+            if game_creation and game_duration:
+                game_end = game_creation + (game_duration * 1000)
+            else:
+                print(f"Missing gameCreation or gameDuration for game {game_id}.")
+                return None
+
+            if all([game_version, game_type, queue_id, game_end]):
+                return {
+                    "gameVersion": game_version,
+                    "gameType": game_type,
+                    "queueId": queue_id,
+                    "gameEnd": game_end
+                }
+            else:
+                print(f"Missing game details for game {game_id}.")
+                return None
+        else:
+            print(f"Failed to get game details for game {game_id}: {response.status_code} - {response.text}")
+            return None
+    except requests.exceptions.ConnectionError:
+        print("Failed to connect to LeagueClient for game details.")
+        return None
+
 def get_replay_metadata(game_id):
-    """Retrieve replay metadata from the API."""
+    """Fetch replay metadata from the API."""
     lcu_data = connect_to_lcu()
 
     if not lcu_data:
@@ -159,8 +201,26 @@ def get_replay_metadata(game_id):
             print(f"Metadata for game {game_id}: {metadata}")
             return metadata
         elif response.status_code == 404:
-            print(f"Metadata for game {game_id} not found.")
-            return None
+            print(f"Metadata for game {game_id} not found. Trying to create it.")
+            game_details = get_game_details(game_id)
+            if not game_details:
+                print(f"Cannot create metadata without game details for game {game_id}.")
+                return None
+            create_url = f"https://127.0.0.1:{lcu_data['port']}/lol-replays/v2/metadata/{game_id}/create"
+            create_response = requests.post(create_url, auth=auth, json=game_details, verify=False)
+            if create_response.status_code in [200, 201, 204]:
+                print(f"Metadata creation requested for game {game_id}. Fetching again.")
+                retry_response = requests.get(url, auth=auth, verify=False)
+                if retry_response.status_code == 200:
+                    metadata = retry_response.json()
+                    print(f"Metadata for game {game_id}: {metadata}")
+                    return metadata
+                else:
+                    print(f"Failed to fetch metadata after creation for game {game_id}: {retry_response.status_code} - {retry_response.text}")
+                    return None
+            else:
+                print(f"Failed to create metadata for game {game_id}: {create_response.status_code} - {create_response.text}")
+                return None
         else:
             print(f"Failed to get metadata for game {game_id}: {response.status_code} - {response.text}")
             return None
@@ -169,7 +229,7 @@ def get_replay_metadata(game_id):
         return None
 
 def create_question_mark_icon(color="#FFFFFF", size=16):
-    """Create a simple question mark icon."""
+    """Generate a simple question mark icon."""
     pixmap = QtGui.QPixmap(size, size)
     pixmap.fill(QtCore.Qt.transparent)
 
@@ -193,11 +253,11 @@ def create_question_mark_icon(color="#FFFFFF", size=16):
     return icon
 
 class CustomTableWidget(QtWidgets.QTableWidget):
-    """Table to display replays."""
+    """Table to show replays."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setColumnCount(3)
-        self.setHorizontalHeaderLabels(["Game ID", "Recently Downloaded", "Date"])
+        self.setHorizontalHeaderLabels(["Game ID", "Downloaded", "Date"])
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.verticalHeader().setVisible(False)
@@ -226,21 +286,17 @@ class CustomTableWidget(QtWidgets.QTableWidget):
         """)
 
     def populate_table(self, replay_list):
-        """Fill the table with replay data."""
+        """Fill the table with replay information."""
         self.setRowCount(len(replay_list))
         for row, (game_id, is_recent, mod_time) in enumerate(replay_list):
             game_id_item = QtWidgets.QTableWidgetItem(f"Game ID: {game_id}")
             game_id_item.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             self.setItem(row, 0, game_id_item)
 
-            if is_recent:
-                recent_item = QtWidgets.QTableWidgetItem("Yes")
-                recent_item.setTextAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
-                recent_item.setForeground(QtGui.QBrush(QtGui.QColor("green")))
-            else:
-                recent_item = QtWidgets.QTableWidgetItem("No")
-                recent_item.setTextAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
-                recent_item.setForeground(QtGui.QBrush(QtGui.QColor("white")))
+            recent_item = QtWidgets.QTableWidgetItem("Yes" if is_recent else "No")
+            recent_item.setTextAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+            color = QtGui.QColor("green") if is_recent else QtGui.QColor("white")
+            recent_item.setForeground(QtGui.QBrush(color))
             self.setItem(row, 1, recent_item)
 
             formatted_date = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M:%S')
@@ -249,9 +305,10 @@ class CustomTableWidget(QtWidgets.QTableWidget):
             self.setItem(row, 2, date_item)
 
 class ReplaysListDialog(QtWidgets.QDialog):
-    """Dialog to show available replays."""
-    def __init__(self, replay_list, parent=None):
+    """Dialog to display available replays."""
+    def __init__(self, replay_list, game_id_entry, parent=None):
         super().__init__(parent)
+        self.game_id_entry = game_id_entry  # Widget to set the selected game ID
         self.setWindowTitle("Available Replays")
         self.resize(720, 500)
 
@@ -269,16 +326,15 @@ class ReplaysListDialog(QtWidgets.QDialog):
         self.setLayout(layout)
 
     def cell_double_clicked(self, row, column):
-        """Handle double-click to select a game ID."""
+        """Set the selected Game ID and close the dialog."""
         game_id_item = self.table_widget.item(row, 0)
         if game_id_item:
-            game_id_text = game_id_item.text()
-            game_id = game_id_text.split(': ')[1]
-            self.parent().game_id_input.setText(game_id)
+            game_id = game_id_item.text().split(': ')[1]
+            self.game_id_entry.setText(game_id)
             self.close()
 
 class ResizeHandle(QtWidgets.QWidget):
-    """Widget to resize the window."""
+    """Handle to resize the window."""
     def __init__(self, parent, handle_type):
         super().__init__(parent)
         self.handle_type = handle_type
@@ -287,6 +343,7 @@ class ResizeHandle(QtWidgets.QWidget):
         self.setCursor(QtCore.Qt.SizeAllCursor)
 
     def mousePressEvent(self, event):
+        """Store initial mouse position and window size."""
         self.start_x = event.globalX()
         self.start_y = event.globalY()
         self.start_width = self.parent().width()
@@ -294,50 +351,48 @@ class ResizeHandle(QtWidgets.QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        """Resize the window based on mouse movement."""
         delta_x = event.globalX() - self.start_x
         delta_y = event.globalY() - self.start_y
+        parent = self.parent()
         if self.handle_type == 'bottom_right':
             new_width = self.start_width + delta_x
             new_height = self.start_height + delta_y
-            self.parent().resize(new_width, new_height)
+            parent.resize(new_width, new_height)
         elif self.handle_type == 'bottom_left':
             new_width = self.start_width - delta_x
             new_height = self.start_height + delta_y
-            self.parent().setGeometry(self.parent().x() + delta_x, self.parent().y(), new_width, new_height)
+            parent.setGeometry(parent.x() + delta_x, parent.y(), new_width, new_height)
         elif self.handle_type == 'top_right':
             new_width = self.start_width + delta_x
             new_height = self.start_height - delta_y
-            self.parent().setGeometry(self.parent().x(), self.parent().y() + delta_y, new_width, new_height)
+            parent.setGeometry(parent.x(), parent.y() + delta_y, new_width, new_height)
         elif self.handle_type == 'top_left':
             new_width = self.start_width - delta_x
             new_height = self.start_height - delta_y
-            self.parent().setGeometry(self.parent().x() + delta_x, self.parent().y() + delta_y, new_width, new_height)
+            parent.setGeometry(parent.x() + delta_x, parent.y() + delta_y, new_width, new_height)
         super().mouseMoveEvent(event)
 
 class HelpDialog(QtWidgets.QDialog):
-    """Dialog with useful links."""
+    """Dialog with helpful links."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Useful Links")
-        self.resize(400, 200)
+        self.resize(600, 200)
 
         layout = QtWidgets.QVBoxLayout()
 
-        label1 = QtWidgets.QLabel('<a href="https://github.com/Rayan0000000/League-Replay-Downloader" style="color: white; text-decoration: none;">Link to the GitHub Project</a>')
-        label1.setOpenExternalLinks(True)
-        label1.setAlignment(QtCore.Qt.AlignCenter)
+        links = [
+            ('Link to GitHub', 'https://github.com/Rayan0000000/League-Replay-Downloader'),
+            ('Showcase of the Downloader', 'https://example.com/showcase'),
+            ('Guide to Download Expired Replays', 'https://youtu.be/TQf838yEi5I?si=EYJMZIKBszwOZ_to')
+        ]
 
-        label2 = QtWidgets.QLabel('<a href="https://example.com/showcase" style="color: white; text-decoration: none;">Link to a showcase of using the League Replay Downloader</a>')
-        label2.setOpenExternalLinks(True)
-        label2.setAlignment(QtCore.Qt.AlignCenter)
-
-        label3 = QtWidgets.QLabel('<a href="https://youtu.be/TQf838yEi5I?si=EYJMZIKBszwOZ_to" style="color: white; text-decoration: none;">Link to a Guide on how to download expired Replays</a>')
-        label3.setOpenExternalLinks(True)
-        label3.setAlignment(QtCore.Qt.AlignCenter)
-
-        layout.addWidget(label1)
-        layout.addWidget(label2)
-        layout.addWidget(label3)
+        for text, url in links:
+            label = QtWidgets.QLabel(f'<a href="{url}" style="color: white; text-decoration: none;">{text}</a>')
+            label.setOpenExternalLinks(True)
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            layout.addWidget(label)
 
         self.setLayout(layout)
 
@@ -396,8 +451,8 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
 
         self.game_id_label = QtWidgets.QLabel("Enter Game ID:")
         self.game_id_label.setStyleSheet("font-size: 12px;")
-        self.game_id_input = QtWidgets.QLineEdit()
-        self.game_id_input.setStyleSheet("""
+        game_id_entry = QtWidgets.QLineEdit()
+        game_id_entry.setStyleSheet("""
             QLineEdit {
                 padding: 8px;
                 border: 1px solid #4c566a;
@@ -406,8 +461,9 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
                 font-size: 12px;
             }
         """)
+        self.game_id_entry = game_id_entry
         content_layout.addWidget(self.game_id_label)
-        content_layout.addWidget(self.game_id_input)
+        content_layout.addWidget(game_id_entry)
 
         self.list_replays_button = QtWidgets.QPushButton("List Available Replays")
         self.list_replays_button.clicked.connect(self.list_replays)
@@ -426,7 +482,7 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         self.response_label.setStyleSheet("font-size: 12px;")
         content_layout.addWidget(self.response_label)
 
-        # Style
+        # Styling
         self.setStyleSheet("""
             QWidget {
                 background-color: #2e3440;
@@ -464,7 +520,7 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         self.resize_handle_tl.move(0, 0)
 
     def mousePressEvent(self, event):
-        """Enable window dragging."""
+        """Start moving the window if the title bar is clicked."""
         if event.button() == QtCore.Qt.LeftButton and self.title_bar.underMouse():
             self.start_x = event.globalX()
             self.start_y = event.globalY()
@@ -473,7 +529,7 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        """Handle window movement."""
+        """Move the window based on mouse movement."""
         if self.is_moving:
             delta_x = event.globalX() - self.start_x
             delta_y = event.globalY() - self.start_y
@@ -483,32 +539,32 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        """Stop window dragging."""
+        """Stop moving the window when the mouse is released."""
         if event.button() == QtCore.Qt.LeftButton:
             self.is_moving = False
             self.setCursor(QtCore.Qt.ArrowCursor)
         super().mouseReleaseEvent(event)
 
     def list_replays(self):
-        """Show available replays."""
+        """Display available replays in a dialog."""
         replay_list, error_message = list_available_replays(self.recently_downloaded)
         if error_message:
             self.response_label.setText(error_message)
             return
         if replay_list:
-            dialog = ReplaysListDialog(replay_list, self)
+            dialog = ReplaysListDialog(replay_list, self.game_id_entry, self)
             dialog.exec_()
         else:
             self.response_label.setText("No replays available.")
 
     def download_replay(self):
-        """Download the selected replay."""
-        game_id = self.game_id_input.text().strip()
+        """Start downloading the entered replay."""
+        game_id = self.game_id_entry.text().strip()
         if not game_id:
             self.response_label.setText("Please enter a Game ID.")
             return
         if not game_id.isdigit():
-            self.response_label.setText("Invalid Game ID. Please enter a numeric ID.")
+            self.response_label.setText("Invalid Game ID. Enter a numeric ID.")
             return
 
         self.download_button.setEnabled(False)
@@ -534,13 +590,13 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         self.download_button.setEnabled(True)
 
     def start_replay_combined(self):
-        """Start replay after checking its status."""
-        game_id = self.game_id_input.text().strip()
+        """Check replay status and start playback."""
+        game_id = self.game_id_entry.text().strip()
         if not game_id:
             self.response_label.setText("Please enter a Game ID.")
             return
         if not game_id.isdigit():
-            self.response_label.setText("Invalid Game ID. Please enter a numeric ID.")
+            self.response_label.setText("Invalid Game ID. Enter a numeric ID.")
             return
 
         self.start_replay_button.setEnabled(False)
@@ -562,12 +618,12 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         self.start_replay_button.setEnabled(True)
 
     def show_help_dialog(self):
-        """Display help links."""
+        """Show the help dialog with useful links."""
         dialog = HelpDialog(self)
         dialog.exec_()
 
 class ReplayDownloaderWorker(QtCore.QObject):
-    """Worker to handle replay downloading."""
+    """Handles replay downloading in a separate thread."""
     finished = QtCore.pyqtSignal(dict)
 
     def __init__(self, game_id):
@@ -577,16 +633,16 @@ class ReplayDownloaderWorker(QtCore.QObject):
     def run(self):
         metadata = get_replay_metadata(self.game_id)
         if metadata is None:
-            result = {'success': False, 'message': "Failed to retrieve replay metadata.", 'game_id': self.game_id}
+            result = {'success': False, 'message': "Failed to get replay metadata.", 'game_id': self.game_id}
             self.finished.emit(result)
             return
 
         state = metadata.get('state', '').lower()
-        print(f"Initial Replay state for game {self.game_id}: {state}")
+        print(f"Initial replay state for game {self.game_id}: {state}")
 
         if state == 'download':
             download_result = download_replay_api(self.game_id)
-            print(f"Download Replay Response for Game ID {self.game_id}: {download_result['message']}")
+            print(f"Download response for Game ID {self.game_id}: {download_result['message']}")
             if not download_result['success']:
                 self.finished.emit(download_result)
                 return
@@ -600,7 +656,7 @@ class ReplayDownloaderWorker(QtCore.QObject):
                     current_state = metadata.get('state', '').lower()
                     print(f"Replay state for game {self.game_id}: {current_state}")
                     if current_state == 'watch':
-                        success_result = {'success': True, 'message': f"Downloaded the Replay for {self.game_id} successfully.", 'game_id': self.game_id}
+                        success_result = {'success': True, 'message': f"Replay {self.game_id} downloaded successfully.", 'game_id': self.game_id}
                         self.finished.emit(success_result)
                         return
                 attempts += 1
@@ -609,7 +665,7 @@ class ReplayDownloaderWorker(QtCore.QObject):
             timeout_result = {'success': False, 'message': f"Download timed out for Replay {self.game_id}.", 'game_id': self.game_id}
             self.finished.emit(timeout_result)
         elif state == 'incompatible':
-            message = "Cannot download replay because it is from a different patch."
+            message = "Cannot download replay from a different patch."
             result = {'success': False, 'message': message, 'game_id': self.game_id}
             self.finished.emit(result)
         elif state == 'watch':
@@ -622,7 +678,7 @@ class ReplayDownloaderWorker(QtCore.QObject):
             self.finished.emit(result)
 
 class ReplayLauncherWorker(QtCore.QObject):
-    """Worker to handle replay launching."""
+    """Handles replay launching in a separate thread."""
     finished = QtCore.pyqtSignal(str)
 
     def __init__(self, game_id, method='combined'):
@@ -633,7 +689,7 @@ class ReplayLauncherWorker(QtCore.QObject):
     def run(self):
         metadata = get_replay_metadata(self.game_id)
         if metadata is None:
-            self.finished.emit("Failed to retrieve replay metadata.")
+            self.finished.emit("Failed to get replay metadata.")
             return
 
         state = metadata.get('state', '').lower()
@@ -653,17 +709,17 @@ class ReplayLauncherWorker(QtCore.QObject):
                 result = "Unknown method."
             self.finished.emit(result)
         elif state == 'incompatible':
-            message = "Cannot play Replay because it is from a different patch."
+            message = "Cannot play replay from a different patch."
             self.finished.emit(message)
         elif state == 'download':
-            message = "Cannot play Replay because you need to download it first."
+            message = "Download the replay first."
             self.finished.emit(message)
         else:
             message = f"Unknown replay state: {state}"
             self.finished.emit(message)
 
 def main():
-    """Run the application."""
+    """Start the application."""
     app = QtWidgets.QApplication(sys.argv)
     window = ReplayDownloaderApp()
     window.show()
