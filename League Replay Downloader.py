@@ -590,7 +590,7 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
         self.download_button.setEnabled(True)
 
     def start_replay_combined(self):
-        """Check replay status and start playback."""
+        """Start replay playback via API."""
         game_id = self.game_id_entry.text().strip()
         if not game_id:
             self.response_label.setText("Please enter a Game ID.")
@@ -600,7 +600,7 @@ class ReplayDownloaderApp(QtWidgets.QWidget):
             return
 
         self.start_replay_button.setEnabled(False)
-        self.response_label.setText("Checking replay status...")
+        self.response_label.setText("Starting replay...")
 
         self.thread = QtCore.QThread()
         self.worker = ReplayLauncherWorker(game_id)
@@ -681,10 +681,9 @@ class ReplayLauncherWorker(QtCore.QObject):
     """Handles replay launching in a separate thread."""
     finished = QtCore.pyqtSignal(str)
 
-    def __init__(self, game_id, method='combined'):
+    def __init__(self, game_id):
         super().__init__()
         self.game_id = game_id
-        self.method = method
 
     def run(self):
         metadata = get_replay_metadata(self.game_id)
@@ -696,17 +695,7 @@ class ReplayLauncherWorker(QtCore.QObject):
         print(f"Replay state for game {self.game_id}: {state}")
 
         if state == 'watch':
-            if self.method == 'api':
-                result = play_replay_api(self.game_id)
-            elif self.method == 'file':
-                result = launch_replay()
-            elif self.method == 'combined':
-                result = play_replay_api(self.game_id)
-                if not result.lower().startswith("replay playback started successfully"):
-                    fallback_result = launch_replay()
-                    result += " | " + fallback_result
-            else:
-                result = "Unknown method."
+            result = play_replay_api(self.game_id)
             self.finished.emit(result)
         elif state == 'incompatible':
             message = "Cannot play replay from a different patch."
